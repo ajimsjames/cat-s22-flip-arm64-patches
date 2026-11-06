@@ -83,6 +83,19 @@ static void save_config(void) {
     fclose(fp);
 }
 
+static void haptic_pulse(int ms) {
+    int fd_dur = open("/sys/class/leds/vibrator/duration", O_WRONLY);
+    int fd_act = open("/sys/class/leds/vibrator/activate", O_WRONLY);
+    if (fd_dur >= 0 && fd_act >= 0) {
+        char buf[16];
+        int len = snprintf(buf, sizeof(buf), "%d\n", ms);
+        write(fd_dur, buf, len);
+        write(fd_act, "1\n", 2);
+    }
+    if (fd_dur >= 0) close(fd_dur);
+    if (fd_act >= 0) close(fd_act);
+}
+
 /* Turn off outer display cleanly via config + stop init services */
 static void outerscreen_kill_all(void) {
     cfg_outer_enabled = 0;
@@ -99,6 +112,19 @@ static void outerscreen_restart(void) {
     if (fd >= 0) { write(fd, "255\n", 4); close(fd); }
     system("start outerscreen 2>/dev/null; start cat_watchdog 2>/dev/null");
     outerscreen_killed = 0;
+}
+
+/* Hard restart outerscreen_service and cat_watchdog with root/init privileges */
+static void outerscreen_hard_restart(void) {
+    haptic_pulse(60);
+    cfg_outer_enabled = 1;
+    system("stop cat_watchdog 2>/dev/null; stop outerscreen 2>/dev/null; killall -9 outerscreen_service cat_watchdog 2>/dev/null");
+    int fd = open("/sys/class/leds/lcd-backlight2/brightness", O_WRONLY);
+    if (fd >= 0) { write(fd, "255\n", 4); close(fd); }
+    usleep(150000);
+    system("start outerscreen 2>/dev/null; start cat_watchdog 2>/dev/null");
+    outerscreen_killed = 0;
+    haptic_pulse(30);
 }
 
 static void load_config(void) {
@@ -199,11 +225,11 @@ static void trigger_hangup(void) {
 }
 
 static void execute_idle_action(const char *action) {
-    if (strcmp(action, "torch") == 0) {
+    if (strcmp(action, "restart_outer") == 0 || strcmp(action, "outer_toggle") == 0) {
+        /* Completely kill and restart outerscreen_service + cat_watchdog with root privileges */
+        outerscreen_hard_restart();
+    } else if (strcmp(action, "torch") == 0) {
         system("am broadcast -a com.cat.parts.TOGGLE_TORCH -n com.cat.parts/.BootReceiver >/dev/null 2>&1");
-    } else if (strcmp(action, "outer_toggle") == 0) {
-        /* Directly toggle the CatParts 'Outer Display Enabled' preference so button & UI stay 100% synced */
-        system("am broadcast -a com.cat.parts.TOGGLE_OUTER -n com.cat.parts/.BootReceiver >/dev/null 2>&1");
     } else if (strcmp(action, "camera") == 0) {
         system("am start -a android.media.action.STILL_IMAGE_CAMERA >/dev/null 2>&1 || input keyevent KEYCODE_CAMERA 2>/dev/null");
     } else if (strcmp(action, "assistant") == 0) {
