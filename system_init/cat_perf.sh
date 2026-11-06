@@ -56,16 +56,12 @@ settings put secure display_density_forced 210 2>/dev/null
 resetprop_phh persist.sys.display_density 210 2>/dev/null
 resetprop -p persist.sys.display_density 210 2>/dev/null
 
-# 8. Prevent Android from sleeping outer screen (SPI bus power gating fix)
-# NotificationShade forces userActivityTimeout=10000ms via window attrs.
-# When Android enters DOZE, the SPI bus is power-gated and outerscreen_service
-# loses access to /dev/graphics/fb2. The outerscreen_service now holds its own
-# kernel wake lock, but we also prevent premature doze from the settings side.
+# 8. Prevent premature display timeout
 settings put system screen_off_timeout 1800000
 settings put global low_power 0
-# Acquire a kernel-level wake lock to prevent SPI bus power gating during DOZE.
-# outerscreen_service writes this at startup, but ensure it survives reboots.
-echo "outerscreen_wakelock" > /sys/power/wake_lock 2>/dev/null
+# NOTE: Permanent outerscreen_wakelock removed to allow SoC deep sleep (C1 power collapse).
+# outerscreen_service manages its own transient wake locks on demand.
+echo "outerscreen_wakelock" > /sys/power/wake_unlock 2>/dev/null
 
 # 9. Infinity-X Low-RAM (2GB) & Pure PSI-based LMKD Tuning
 # Disable legacy static minfree levels and enforce pure PSI pressure stalls
