@@ -19,12 +19,19 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <sys/stat.h>
+#include <poll.h>
+#include <linux/input.h>
 
 #define FB_DEV          "/dev/graphics/fb2"
 #define BACKLIGHT_NODE  "/sys/devices/platform/soc/1a00000.qcom,mdss_mdp/1a00000.qcom,mdss_mdp:qcom,mdss_fb_secondary/leds/lcd-backlight2/brightness"
 #define BACKLIGHT_ALT   "/sys/class/leds/lcd-backlight2/brightness"
 #define WAKELOCK_PATH   "/sys/power/wake_lock"
+#define WAKEUNLOCK_PATH "/sys/power/wake_unlock"
 #define WAKELOCK_NAME   "outerscreen_wakelock\n"
+
+#define PTT_KEY_1       523  /* KEY_NUMERIC_B */
+#define PTT_KEY_2       525  /* Raw matrix row=4 col=3 */
+#define WAKE_TIMEOUT_SEC 10
 
 static void acquire_wakelock(void) {
     int fd = open(WAKELOCK_PATH, O_WRONLY);
@@ -32,6 +39,43 @@ static void acquire_wakelock(void) {
         write(fd, WAKELOCK_NAME, sizeof(WAKELOCK_NAME) - 1);
         close(fd);
     }
+}
+
+static void release_wakelock(void) {
+    int fd = open(WAKEUNLOCK_PATH, O_WRONLY);
+    if (fd >= 0) {
+        write(fd, WAKELOCK_NAME, sizeof(WAKELOCK_NAME) - 1);
+        close(fd);
+    }
+}
+
+static int open_input_device_by_name(const char *target_name) {
+    for (int i = 0; i < 16; i++) {
+        char path[64];
+        snprintf(path, sizeof(path), "/dev/input/event%d", i);
+        int fd = open(path, O_RDONLY | O_NONBLOCK);
+        if (fd >= 0) {
+            char name[128] = {0};
+            if (ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name) >= 0) {
+                if (strstr(name, target_name) != NULL) {
+                    return fd;
+                }
+            }
+            close(fd);
+        }
+    }
+    return -1;
+}
+
+/* Returns: 1 = lid open, 0 = lid closed */
+static int get_lid_state(int hall_fd) {
+    if (hall_fd < 0) return 0; /* Default closed if no sensor */
+    unsigned long sw_bit = 0;
+    if (ioctl(hall_fd, EVIOCGSW(sizeof(sw_bit)), &sw_bit) >= 0) {
+        /* SW_LID bit 0: 0 = lid open, 1 = lid closed */
+        return (sw_bit & 1) ? 0 : 1;
+    }
+    return 0;
 }
 
 static void set_backlight(int val) {
@@ -750,8 +794,6 @@ static void render_call_hud(uint32_t *fb, const char *theme, int call_state, con
 int main(void) {
     signal(SIGPIPE, SIG_IGN);
 
-    acquire_wakelock();
-
     int fb_fd = open(FB_DEV, O_RDWR);
     if (fb_fd < 0) return 1;
 
@@ -768,6 +810,11 @@ int main(void) {
         return 1;
     }
 
+    /* Open input devices for event monitoring */
+    int hall_fd = open_input_device_by_name("hall_switch");
+    int ptt_fd  = open_input_device_by_name("matrix_keypad");
+    if (ptt_fd < 0) ptt_fd = open_input_device_by_name("gpio_keys");
+
     int call_state = 0;
     char incoming_num[64] = {0};
     char contact_name[64] = {0};
@@ -775,28 +822,125 @@ int main(void) {
     time_t call_start_time = 0;
     unsigned long loop_count = 0;
 
+    int last_lid_open = -1;
+    time_t wake_expire_time = time(NULL) + WAKE_TIMEOUT_SEC; /* Wake on boot */
+    int display_active = 1;
+
     for (;;) {
         loop_count++;
         load_outer_config();
 
-        if (!cfg_outer_enabled) {
-            set_backlight(0);
-            clear_screen(fb);
-            vinfo.yoffset = 0;
-            ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
-            sleep(1);
-            continue;
+        /* Always refresh watchdog heartbeat so watchdog does not restart daemon while idle */
+        int hbfd = open("/dev/shm_outerscreen_heartbeat", O_CREAT | O_WRONLY | O_TRUNC, 0666);
+        if (hbfd >= 0) close(hbfd);
+
+        /* Re-open input fds if disconnected */
+        if (hall_fd < 0) hall_fd = open_input_device_by_name("hall_switch");
+        if (ptt_fd < 0) {
+            ptt_fd = open_input_device_by_name("matrix_keypad");
+            if (ptt_fd < 0) ptt_fd = open_input_device_by_name("gpio_keys");
         }
 
-        set_backlight(cfg_outer_brightness);
-        ioctl(fb_fd, FBIOBLANK, FB_BLANK_UNBLANK);
-        clear_screen(fb);
+        /* 1. Poll input devices (Hall sensor + PTT) non-blocking */
+        struct pollfd pfds[2];
+        int num_pfds = 0;
+        if (hall_fd >= 0) { pfds[num_pfds].fd = hall_fd; pfds[num_pfds].events = POLLIN; num_pfds++; }
+        if (ptt_fd >= 0)  { pfds[num_pfds].fd = ptt_fd;  pfds[num_pfds].events = POLLIN; num_pfds++; }
 
-        /* Telephony */
+        if (num_pfds > 0) {
+            int ret = poll(pfds, num_pfds, 0);
+            if (ret > 0) {
+                for (int i = 0; i < num_pfds; i++) {
+                    if (pfds[i].revents & POLLIN) {
+                        struct input_event ev;
+                        while (read(pfds[i].fd, &ev, sizeof(ev)) == sizeof(ev)) {
+                            /* Hall sensor LID event */
+                            if (ev.type == EV_SW && ev.code == 0) {
+                                int lid_open = (ev.value == 0) ? 1 : 0;
+                                if (last_lid_open != lid_open) {
+                                    if (lid_open == 0) {
+                                        /* Flip just closed -> Turn ON outer screen for 10s */
+                                        wake_expire_time = time(NULL) + WAKE_TIMEOUT_SEC;
+                                    }
+                                    last_lid_open = lid_open;
+                                }
+                            }
+                            /* PTT key event */
+                            else if (ev.type == EV_KEY && (ev.code == PTT_KEY_1 || ev.code == PTT_KEY_2)) {
+                                if (ev.value == 1) {
+                                    /* PTT pressed -> Wake outer screen for 10s */
+                                    wake_expire_time = time(NULL) + WAKE_TIMEOUT_SEC;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /* If hall sensor node exists, verify current switch state */
+        if (hall_fd >= 0 && last_lid_open == -1) {
+            last_lid_open = get_lid_state(hall_fd);
+            if (last_lid_open == 0) {
+                wake_expire_time = time(NULL) + WAKE_TIMEOUT_SEC;
+            }
+        }
+
+        /* 2. Check Telephony (Call state keeps screen active) */
         if (call_state != 0 || loop_count % 2 == 1) {
             call_state = poll_telephony(incoming_num, sizeof(incoming_num));
         }
 
+        /* 3. Determine if outer display should be active */
+        time_t now = time(NULL);
+        int should_display = 0;
+
+        if (!cfg_outer_enabled) {
+            should_display = 0;
+        } else if (call_state > 0) {
+            /* Always display during incoming or active call */
+            should_display = 1;
+            wake_expire_time = now + WAKE_TIMEOUT_SEC;
+        } else if (last_lid_open == 1) {
+            /* Flip is OPEN -> Outer display MUST be OFF */
+            should_display = 0;
+        } else {
+            /* Flip is CLOSED -> Display active if within 10 seconds of close or PTT press */
+            if (now < wake_expire_time) {
+                should_display = 1;
+            } else {
+                should_display = 0;
+            }
+        }
+
+        /* 4. Display state transitions */
+        if (!should_display) {
+            if (display_active) {
+                /* Transition to OFF: blank FB, turn off backlight, release wakelock */
+                set_backlight(0);
+                clear_screen(fb);
+                vinfo.yoffset = 0;
+                ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
+                ioctl(fb_fd, FBIOBLANK, FB_BLANK_POWERDOWN);
+                release_wakelock();
+                display_active = 0;
+            }
+            sleep(1);
+            continue;
+        }
+
+        /* Transition to ON / Active rendering */
+        if (!display_active) {
+            acquire_wakelock();
+            ioctl(fb_fd, FBIOBLANK, FB_BLANK_UNBLANK);
+            set_backlight(cfg_outer_brightness);
+            display_active = 1;
+        }
+
+        set_backlight(cfg_outer_brightness);
+        clear_screen(fb);
+
+        /* Render UI */
         if (call_state > 0) {
             if (incoming_num[0] && strcmp(incoming_num, last_resolved_num) != 0) {
                 lookup_contact_name(incoming_num, contact_name, sizeof(contact_name));
@@ -813,7 +957,6 @@ int main(void) {
             call_start_time = 0;
             last_resolved_num[0] = '\0';
             contact_name[0] = '\0';
-            time_t now = time(NULL);
             struct tm *tm_info = localtime(&now);
             int bat = get_battery();
             int cpu = get_cpu_usage();
@@ -821,17 +964,15 @@ int main(void) {
             render_watchface(fb, cfg_outer_theme, tm_info, bat, cpu, ram);
         }
 
-        acquire_wakelock();
         vinfo.yoffset = 0;
         ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
         ioctl(fb_fd, FBIOPAN_DISPLAY, &vinfo);
 
-        /* Touch heartbeat file */
-        int hbfd = open("/dev/shm_outerscreen_heartbeat", O_CREAT | O_WRONLY | O_TRUNC, 0666);
-        if (hbfd >= 0) close(hbfd);
-
         sleep(1);
     }
 
+    if (hall_fd >= 0) close(hall_fd);
+    if (ptt_fd >= 0) close(ptt_fd);
+    close(fb_fd);
     return 0;
 }
