@@ -145,9 +145,9 @@ int main(void) {
                 if (fds[i].revents & POLLIN) {
                     struct input_event ev;
                     while (read(fds[i].fd, &ev, sizeof(ev)) == sizeof(ev)) {
-                        /* EV_SW = 0x05, SW_LID = 0x00 */
+                        /* EV_SW = 0x05, SW_LID = 0x00 (0 = lid open, 1 = lid closed) */
                         if (ev.type == 0x05 && ev.code == 0x00) {
-                            lid_open = (ev.value != 0) ? 1 : 0;
+                            lid_open = (ev.value == 0) ? 1 : 0;
                             last_activity = now;
                             current_led_val = -1;
                         } else if (ev.type == EV_KEY && ev.value == 1) {
