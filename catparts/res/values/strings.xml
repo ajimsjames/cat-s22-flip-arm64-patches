@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cat S22 Flip Settings</string>
+    <string name="app_summary">PTT key actions, outer OLED display, themes, and keypad backlight</string>
+
+    <string-array name="ptt_idle_entries">
+        <item>Toggle Flashlight / Torch</item>
+        <item>Toggle Outer OLED Display ON/OFF</item>
+        <item>Launch Camera</item>
+        <item>Voice Assistant</item>
+        <item>Mute / Unmute Volume</item>
+        <item>Disabled (Do Nothing)</item>
+    </string-array>
+    <string-array name="ptt_idle_values">
+        <item>torch</item>
+        <item>outer_toggle</item>
+        <item>camera</item>
+        <item>assistant</item>
+        <item>dnd</item>
+        <item>none</item>
+    </string-array>
+
+    <string-array name="ptt_incall_entries">
+        <item>Answer on Speakerphone / Hold to Hang Up</item>
+        <item>Answer on Earpiece / Hold to Hang Up</item>
+        <item>Toggle Microphone Mute</item>
+        <item>Disabled in Calls</item>
+    </string-array>
+    <string-array name="ptt_incall_values">
+        <item>answer_spk</item>
+        <item>answer_ear</item>
+        <item>mute</item>
+        <item>none</item>
+    </string-array>
+
+    <string-array name="outer_theme_entries">
+        <item>1. Pip-Boy 3000 (Vault-Tec Phosphor Green)</item>
+        <item>2. Casio G-Shock Rugged (Outdoor Digital)</item>
+        <item>3. DOOM Slayer HUD (1993 Health &amp; Armor)</item>
+        <item>4. Star Trek LCARS (Starfleet Orange &amp; Amber)</item>
+        <item>5. Cyberpunk Amber (Warm Telemetry)</item>
+        <item>6. Matrix Digital Rain (Falling Phosphor)</item>
+        <item>7. CAT Heavy Industrial (Yellow &amp; Black Hazard)</item>
+        <item>8. Tactical Radar HUD (Avionics Sweep)</item>
+        <item>9. Synthwave 80s (Neon Magenta Grid)</item>
+        <item>10. Retro LCD Watch (F-91W 7-Segment)</item>
+        <item>11. Nothing Dot-Matrix (Stark White Glyphs)</item>
+        <item>12. Stark OLED Mono (Zero Drain Black)</item>
+        <item>13. Fallout New Vegas (Mojave Amber CRT)</item>
+        <item>14. Secret Agent 007 (N64 Pause Watch)</item>
+        <item>15. Retro Game Boy (1989 DMG-01 Olive)</item>
+        <item>16. Night City Arasaka (Cyber Crimson)</item>
+        <item>17. Linux Root Terminal (Bash CLI Shell)</item>
+        <item>18. Glass Cockpit PFD (Aviation Horizon)</item>
+        <item>19. Sub Aqua Diver 300M (Deep Sea Teal)</item>
+        <item>20. Cyber Synth Grid (Outrun Neon)</item>
+        <item>21. Steampunk Pressure (Brass Steam Gauge)</item>
+        <item>22. Solar Eclipse Minimal (Zen Corona)</item>
+    </string-array>
+    <string-array name="outer_theme_values">
+        <item>pipboy</item>
+        <item>gshock</item>
+        <item>doom</item>
+        <item>lcars</item>
+        <item>amber</item>
+        <item>matrix</item>
+        <item>cat</item>
+        <item>radar</item>
+        <item>synthwave</item>
+        <item>lcd</item>
+        <item>nothing</item>
+        <item>mono</item>
+        <item>vegas</item>
+        <item>agent007</item>
+        <item>gameboy</item>
+        <item>arasaka</item>
+        <item>terminal</item>
+        <item>cockpit</item>
+        <item>diver</item>
+        <item>cybersynth</item>
+        <item>steampunk</item>
+        <item>solar</item>
+    </string-array>
+
+    <string-array name="outer_call_entries">
+        <item>1. Pip-Boy Incoming &amp; Active Link</item>
+        <item>2. Pip-Boy Active Comm HUD</item>
+        <item>3. Red Alert Emergency Banner</item>
+        <item>4. Cyberpunk VoLTE Terminal</item>
+        <item>5. CAT Field Radio Handset</item>
+        <item>6. Retro 80s Cassette Deck</item>
+        <item>7. Tactical Target Lock Call</item>
+        <item>8. Minimal Stark Call HUD</item>
+        <item>9. Tactical Encrypted Call (Mil-Spec AES)</item>
+        <item>10. Starfleet Subspace Call (LCARS)</item>
+        <item>11. Cyberpunk Holo-Link (Fixer Neural)</item>
+        <item>12. CAT Dual-Band Walkie (PTT Direct)</item>
+        <item>13. Retro Motorola Pager (90s Beeper)</item>
+        <item>14. Secret Agent M Comms (MI6 Secure)</item>
+    </string-array>
+    <string-array name="outer_call_values">
+        <item>pipboy</item>
+        <item>pipboy_active</item>
+        <item>red_alert</item>
+        <item>cyberpunk</item>
+        <item>cat_radio</item>
+        <item>cassette</item>
+        <item>target</item>
+        <item>minimal</item>
+        <item>encrypted</item>
+        <item>starfleet</item>
+        <item>holo</item>
+        <item>walkie</item>
+        <item>pager</item>
+        <item>mi6</item>
+    </string-array>
+
+    <string-array name="outer_footer_entries">
+        <item>Estimated Battery Life &amp; Power Info</item>
+        <item>Live System Logcat Tail (2 lines)</item>
+        <item>Theme Telemetry Status Line</item>
+        <item>Clean / Empty Footer</item>
+    </string-array>
+    <string-array name="outer_footer_values">
+        <item>battery</item>
+        <item>logcat</item>
+        <item>status</item>
+        <item>off</item>
+    </string-array>
+
+    <string-array name="keylight_timeout_entries">
+        <item>Always On While Flip Open</item>
+        <item>Auto-Off After 5 Seconds</item>
+        <item>Auto-Off After 10 Seconds</item>
+        <item>Auto-Off After 30 Seconds</item>
+        <item>Auto-Off After 60 Seconds</item>
+    </string-array>
+    <string-array name="keylight_timeout_values">
+        <item>0</item>
+        <item>5</item>
+        <item>10</item>
+        <item>30</item>
+        <item>60</item>
+    </string-array>
+
+    <string-array name="mouse_speed_entries">
+        <item>Slow / Precision (10 px/tick)</item>
+        <item>Normal (16 px/tick)</item>
+        <item>Fast (24 px/tick)</item>
+        <item>Ultra Fast (35 px/tick)</item>
+    </string-array>
+    <string-array name="mouse_speed_values">
+        <item>10</item>
+        <item>16</item>
+        <item>24</item>
+        <item>35</item>
+    </string-array>
+</resources>

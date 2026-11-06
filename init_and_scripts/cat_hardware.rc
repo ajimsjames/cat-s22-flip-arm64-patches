@@ -1,0 +1,117 @@
+service keypad_debounce /system/bin/keypad_debounce_clean
+    class main
+    user root
+    group root input
+    seclabel u:r:phhsu_daemon:s0
+    oneshot
+
+service cat_keylight /system/bin/cat_hall_keylight
+    class main
+    user root
+    group root input
+    seclabel u:r:phhsu_daemon:s0
+
+# Boot logger streams raw kmsg to outer OLED until boot complete
+service cat_boot_disp /system/bin/cat_boot_display
+    class main
+    user root
+    group root graphics
+    seclabel u:r:phhsu_daemon:s0
+
+# Multi-Theme Outer OLED Display HUD
+service outerscreen /system/bin/outerscreen_service
+    user root
+    group root input graphics
+    seclabel u:r:phhsu_daemon:s0
+
+# 10-Second Auto-Recovery Watchdog
+service cat_watchdog /system/bin/cat_watchdog
+    user root
+    group root graphics
+    seclabel u:r:phhsu_daemon:s0
+
+service cat_ptt /system/bin/cat_ptt_service
+    class main
+    user root
+    group root input
+    seclabel u:r:phhsu_daemon:s0
+
+# Dedicated Hall Sensor Flip Wake & Sleep Daemon (isolated from outerscreen)
+service cat_hall /system/bin/cat_hall_wake
+    class main
+    user root
+    group root log
+    seclabel u:r:phhsu_daemon:s0
+
+# Smart Keypad Haptic Feedback Daemon
+service cat_haptic /system/bin/cat_haptic_service
+    class main
+    user root
+    group root input
+    seclabel u:r:phhsu_daemon:s0
+
+on early-init
+    mkdir /dev/memcg 0700 root system
+    mount cgroup none /dev/memcg memory
+    chmod 0666 /sys/class/leds/keyboard_light/brightness
+    chmod 0666 /sys/devices/platform/soc/soc:keyboard_light/leds/keyboard_light/brightness
+    chmod 0666 /sys/class/leds/lcd-backlight2/brightness
+    chmod 0666 /sys/class/leds/vibrator/duration
+    chmod 0666 /sys/class/leds/vibrator/activate
+
+on boot
+    chmod 0666 /sys/class/leds/keyboard_light/brightness
+    chmod 0666 /sys/devices/platform/soc/soc:keyboard_light/leds/keyboard_light/brightness
+    chmod 0666 /sys/class/leds/lcd-backlight2/brightness
+    chmod 0666 /sys/class/leds/vibrator/duration
+    chmod 0666 /sys/class/leds/vibrator/activate
+    write /dev/shm_outerscreen_cmd ""
+    chmod 0666 /dev/shm_outerscreen_cmd
+    chmod 0666 /dev/shm_outerscreen
+    chmod 0666 /dev/shm_outerscreen_heartbeat
+    start keypad_debounce
+    start cat_keylight
+    start cat_boot_disp
+    start cat_ptt
+    start cat_hall
+    start cat_haptic
+
+on property:sys.boot_completed=1
+    chmod 0666 /sys/class/leds/keyboard_light/brightness
+    chmod 0666 /sys/devices/platform/soc/soc:keyboard_light/leds/keyboard_light/brightness
+    chmod 0666 /sys/class/leds/lcd-backlight2/brightness
+    chmod 0666 /sys/class/leds/vibrator/duration
+    chmod 0666 /sys/class/leds/vibrator/activate
+    write /dev/shm_outerscreen_cmd ""
+    chmod 0666 /dev/shm_outerscreen_cmd
+    chmod 0666 /dev/shm_outerscreen
+    chmod 0666 /dev/shm_outerscreen_heartbeat
+    stop cat_boot_disp
+    start outerscreen
+    start cat_watchdog
+    start keypad_debounce
+    start cat_keylight
+    start cat_ptt
+    start cat_hall
+    start cat_haptic
+
+# --- Device Performance & Memory Optimization ---
+service cat_perf /system/bin/cat_perf.sh
+    class late_start
+    user root
+    group root
+    seclabel u:r:phhsu_daemon:s0
+    oneshot
+
+on property:sys.boot_completed=1
+    start cat_perf
+
+# Persistent IMS Cellular Network Daemon
+service cat_ims /system/bin/cat_ims_daemon.sh
+    class late_start
+    user root
+    group root
+    seclabel u:r:phhsu_daemon:s0
+
+on property:sys.boot_completed=1
+    start cat_ims

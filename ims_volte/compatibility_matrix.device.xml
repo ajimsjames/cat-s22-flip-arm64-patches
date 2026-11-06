@@ -1,0 +1,38 @@
+<!--
+    Cat S22 Flip Framework VINTF Compatibility Matrix
+    Allows Android 15 Treble framework to bind Qualcomm QM215 radio HIDL interfaces
+-->
+<compatibility-matrix version="9.0" type="framework">
+    <sepolicy>
+        <kernel-sepolicy-version>30</kernel-sepolicy-version>
+        <sepolicy-version>28.0</sepolicy-version>
+        <sepolicy-version>29.0</sepolicy-version>
+        <sepolicy-version>30.0</sepolicy-version>
+        <sepolicy-version>31.0</sepolicy-version>
+        <sepolicy-version>32.0</sepolicy-version>
+        <sepolicy-version>33.0</sepolicy-version>
+        <sepolicy-version>34.0</sepolicy-version>
+        <sepolicy-version>202404</sepolicy-version>
+    </sepolicy>
+    <avb>
+        <vbmeta-version>1.0</vbmeta-version>
+    </avb>
+    <hal format="hidl" optional="true">
+        <name>vendor.qti.hardware.radio.ims</name>
+        <version>1.0-7</version>
+        <interface>
+            <name>IImsRadio</name>
+            <instance>imsradio0</instance>
+            <instance>imsradio1</instance>
+        </interface>
+    </hal>
+    <hal format="hidl" optional="true">
+        <name>vendor.qti.hardware.radio.qcrilhook</name>
+        <version>1.0</version>
+        <interface>
+            <name>IQcrilHook</name>
+            <instance>oemhook0</instance>
+            <instance>oemhook1</instance>
+        </interface>
+    </hal>
+</compatibility-matrix>

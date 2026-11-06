@@ -1,0 +1,110 @@
+
+; Apps, except isolated apps and SDK sandboxes, are clients of Drm-related services
+; Unfortunately, we can't currently express this in module policy language:
+(typeattributeset hal_drm_client ((and (appdomain) ((not (or (isolated_app_all) (sdk_sandbox_all)))))))
+
+; Apps, except isolated apps, are clients of Configstore HAL
+; Unfortunately, we can't currently express this in module policy language:
+;     typeattribute { appdomain -isolated_app_all } hal_configstore_client;
+(typeattributeset hal_configstore_client ((and (appdomain) ((not (isolated_app_all))))))
+
+; Apps, except isolated apps, are clients of Graphics Allocator HAL
+; Unfortunately, we can't currently express this in module policy language:
+;     typeattribute { appdomain -isolated_app } hal_graphics_allocator_client;
+(typeattributeset hal_graphics_allocator_client ((and (appdomain) ((not (isolated_app))))))
+
+; Apps, except isolated apps, are clients of Cas HAL
+; Unfortunately, we can't currently express this in module policy language:
+;     typeattribute { appdomain -isolated_app_all } hal_cas_client;
+(typeattributeset hal_cas_client ((and (appdomain) ((not (isolated_app_all))))))
+
+; Domains hosting Camera HAL implementations are clients of Allocator HAL
+; Unfortunately, we can't currently express this in module policy language:
+;     typeattribute hal_camera hal_allocator_client;
+(typeattributeset hal_allocator_client (hal_camera))
+
+; Apps, except isolated apps, are clients of Neuralnetworks HAL
+; Unfortunately, we can't currently express this in module policy language:
+;     typeattribute { appdomain -isolated_app_all } hal_neuralnetworks_client;
+(typeattributeset hal_neuralnetworks_client ((and (appdomain) ((not (isolated_app))))))
+
+; TODO(b/112056006): move these to mapping files when/if we implement 'versioned' attributes.
+; Rename untrusted_app_visible_* to untrusted_app_visible_*_violators.
+; Unfortunately, we can't currently express this in module policy language:
+;     typeattribute untrusted_app_visible_hwservice untrusted_app_visible_hwservice_violators;
+;     typeattribute untrusted_app_visible_halserver untrusted_app_visible_halserver_violators;
+(typeattribute untrusted_app_visible_hwservice)
+(typeattributeset untrusted_app_visible_hwservice_violators (untrusted_app_visible_hwservice))
+(typeattribute untrusted_app_visible_halserver)
+(typeattributeset untrusted_app_visible_halserver_violators (untrusted_app_visible_halserver))
+
+; Properties having both system_property_type and vendor_property_type are illegal
+; Unfortunately, we can't currently express this in module policy language:
+;     typeattribute { system_property_type && vendor_property_type } system_and_vendor_property_type;
+(typeattribute system_and_vendor_property_type)
+(typeattributeset system_and_vendor_property_type ((and (system_property_type) (vendor_property_type))))
+
+
+;; --- CUSTOM CAT S22 FLIP RULES FOR ANDROID 15/16 ---
+(allow priv_app rild (binder (call transfer)))
+(allow rild priv_app (binder (call transfer)))
+(allow priv_app rild (fd (use)))
+(allow priv_app vendor_radio_prop (file (read getattr open map)))
+(typepermissive priv_app)
+(typepermissive su)
+(typepermissive untrusted_app)
+(typepermissive untrusted_app_27)
+(typepermissive untrusted_app_29)
+(typepermissive untrusted_app_32)
+
+;; Cat S22 Flip Hardware Daemons (phhsu_daemon)
+(typepermissive phhsu_daemon)
+(allow phhsu_daemon self (capability (chown dac_override dac_read_search fowner fsetid kill setgid setuid net_admin net_raw sys_admin sys_rawio sys_nice sys_resource)))
+(allow phhsu_daemon self (capability2 (block_suspend wake_alarm syslog)))
+
+;; Qualcomm IMS / RIL / CND / Sensor / Audio / Location SELinux Fixes
+(typepermissive ims)
+(typepermissive hal_imsrtp)
+(typepermissive cnd)
+(typepermissive netmgrd)
+(typepermissive rild)
+(typepermissive qti_init_shell)
+(typepermissive wcnss_service)
+(typepermissive thermal-engine)
+(typepermissive hal_gnss_qti)
+(typepermissive location)
+(typepermissive hal_perf_default)
+(allow ims diag_device (chr_file (ioctl read write getattr lock append map open)))
+(allow hal_imsrtp diag_device (chr_file (ioctl read write getattr lock append map open)))
+(allow cnd diag_device (chr_file (ioctl read write getattr lock append map open)))
+(allow netmgrd diag_device (chr_file (ioctl read write getattr lock append map open)))
+(allow rild diag_device (chr_file (ioctl read write getattr lock append map open)))
+(allow sensors diag_device (chr_file (ioctl read write getattr lock append map open)))
+(allow hal_sensors_default diag_device (chr_file (ioctl read write getattr lock append map open)))
+(allow hal_audio_default diag_device (chr_file (ioctl read write getattr lock append map open)))
+(allow hal_audio_default system_file (file (read getattr open map)))
+(allow hal_audio_default cgroup_desc_file (file (read getattr open map)))
+(allow hal_gnss_qti system_file (file (read getattr open map)))
+(allow hal_gnss_qti cgroup_desc_file (file (read getattr open map)))
+(allow location system_file (file (read getattr open map)))
+(allow location cgroup_desc_file (file (read getattr open map)))
+(allow init system_file (file (read getattr open map)))
+(allow init cgroup_desc_file (file (read getattr open map)))
+(allow init sysfs_kb_light (file (setattr write read open getattr)))
+(allow init sysfs (file (setattr write read open getattr)))
+(allow zygote vendor_default_prop (file (read getattr open map)))
+(allow audioserver vendor_default_prop (file (read getattr open map)))
+(allow mediaserver vendor_default_prop (file (read getattr open map)))
+(allow surfaceflinger vendor_firmware_file (dir (search read open getattr)))
+(allow system_server sysfs (file (read getattr open)))
+
+;; --- CATPARTS & KEYLIGHT SELINUX PERMISSIONS ---
+(typepermissive system_app)
+(typepermissive platform_app)
+(typepermissive untrusted_app_30)
+(allow appdomain tmpfs (file (ioctl read write create getattr setattr lock append map unlink open)))
+(allow appdomain sysfs_kb_light (file (ioctl read write getattr lock append map open)))
+(allow appdomain sysfs_leds (dir (search read open getattr)))
+(allow appdomain sysfs_leds (file (ioctl read write getattr lock append map open)))
+(allow appdomain sysfs_leds (lnk_file (read getattr open)))
+(allow appdomain sysfs (file (ioctl read write getattr lock append map open)))

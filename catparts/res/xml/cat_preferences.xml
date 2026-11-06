@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory android:title="PTT Side Button">
+        <ListPreference
+            android:key="ptt_short"
+            android:title="Short Press Action (&lt; 0.5s)"
+            android:summary="%s"
+            android:entries="@array/ptt_idle_entries"
+            android:entryValues="@array/ptt_idle_values"
+            android:defaultValue="torch" />
+
+        <ListPreference
+            android:key="ptt_long"
+            android:title="Long Hold Action (&gt; 2.0s)"
+            android:summary="%s"
+            android:entries="@array/ptt_idle_entries"
+            android:entryValues="@array/ptt_idle_values"
+            android:defaultValue="outer_toggle" />
+
+        <ListPreference
+            android:key="ptt_incall"
+            android:title="In-Call PTT Action (0.5s – 2.0s)"
+            android:summary="%s"
+            android:entries="@array/ptt_incall_entries"
+            android:entryValues="@array/ptt_incall_values"
+            android:defaultValue="answer_spk" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Outer 128x128 OLED Display">
+        <SwitchPreference
+            android:key="outer_enabled"
+            android:title="Outer Display Enabled"
+            android:summary="Keep HUD active on the external display"
+            android:defaultValue="true" />
+
+        <ListPreference
+            android:key="outer_theme"
+            android:title="Watchface Theme"
+            android:summary="%s"
+            android:entries="@array/outer_theme_entries"
+            android:entryValues="@array/outer_theme_values"
+            android:defaultValue="pipboy" />
+
+        <ListPreference
+            android:key="outer_call_theme"
+            android:title="Call UI Theme"
+            android:summary="%s"
+            android:entries="@array/outer_call_entries"
+            android:entryValues="@array/outer_call_values"
+            android:defaultValue="pipboy" />
+
+        <ListPreference
+            android:key="outer_footer"
+            android:title="Outer Display Bottom Footer"
+            android:summary="%s"
+            android:entries="@array/outer_footer_entries"
+            android:entryValues="@array/outer_footer_values"
+            android:defaultValue="battery" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Physical T9 Keypad Backlight">
+        <SwitchPreference
+            android:key="keylight_enabled"
+            android:title="Keypad Backlight Enabled"
+            android:summary="Illuminate physical T9 keypad when flip is open"
+            android:defaultValue="true" />
+
+        <ListPreference
+            android:key="keylight_timeout"
+            android:title="Keypad Backlight Timeout"
+            android:summary="%s"
+            android:entries="@array/keylight_timeout_entries"
+            android:entryValues="@array/keylight_timeout_values"
+            android:defaultValue="0" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Virtual Mouse Pointer (Hold * for 2s)">
+        <ListPreference
+            android:key="mouse_speed"
+            android:title="Mouse Pointer Speed"
+            android:summary="%s"
+            android:entries="@array/mouse_speed_entries"
+            android:entryValues="@array/mouse_speed_values"
+            android:defaultValue="16" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="VoLTE / IMS &amp; Telephony">
+        <SwitchPreference
+            android:key="ims_request_network"
+            android:title="Request IMS Cellular Network"
+            android:summary="Keep cellular IMS PDN bearer active continuously"
+            android:defaultValue="true" />
+        <SwitchPreference
+            android:key="ims_force_volte"
+            android:title="Force-Enable 4G Calling / VoLTE"
+            android:summary="Bypass carrier restrictions and force VoLTE/VoWiFi availability"
+            android:defaultValue="true" />
+        <SwitchPreference
+            android:key="ims_async_incoming_calls"
+            android:title="Async Binder Incoming Calls"
+            android:summary="Prevent RIL deadlocks and missed calls from binder blocking"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>
