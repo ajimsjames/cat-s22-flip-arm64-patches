@@ -53,6 +53,11 @@ service cat_haptic /system/bin/cat_haptic_service
 on early-init
     mkdir /dev/memcg 0700 root system
     mount cgroup none /dev/memcg memory
+    write /sys/class/gpio/export 1190
+    write /sys/class/gpio/export 1276
+    write /sys/class/gpio/gpio1276/direction out
+    chmod 0666 /sys/class/gpio/gpio1190/value
+    chmod 0666 /sys/class/gpio/gpio1276/value
     chmod 0666 /sys/class/leds/keyboard_light/brightness
     chmod 0666 /sys/devices/platform/soc/soc:keyboard_light/leds/keyboard_light/brightness
     chmod 0666 /sys/class/leds/lcd-backlight2/brightness
@@ -60,6 +65,11 @@ on early-init
     chmod 0666 /sys/class/leds/vibrator/activate
 
 on boot
+    write /sys/class/gpio/export 1190
+    write /sys/class/gpio/export 1276
+    write /sys/class/gpio/gpio1276/direction out
+    chmod 0666 /sys/class/gpio/gpio1190/value
+    chmod 0666 /sys/class/gpio/gpio1276/value
     chmod 0666 /sys/class/leds/keyboard_light/brightness
     chmod 0666 /sys/devices/platform/soc/soc:keyboard_light/leds/keyboard_light/brightness
     chmod 0666 /sys/class/leds/lcd-backlight2/brightness
@@ -77,6 +87,11 @@ on boot
     start cat_haptic
 
 on property:sys.boot_completed=1
+    write /sys/class/gpio/export 1190
+    write /sys/class/gpio/export 1276
+    write /sys/class/gpio/gpio1276/direction out
+    chmod 0666 /sys/class/gpio/gpio1190/value
+    chmod 0666 /sys/class/gpio/gpio1276/value
     chmod 0666 /sys/class/leds/keyboard_light/brightness
     chmod 0666 /sys/devices/platform/soc/soc:keyboard_light/leds/keyboard_light/brightness
     chmod 0666 /sys/class/leds/lcd-backlight2/brightness

@@ -14,6 +14,7 @@ adb push "$BASE_DIR/keypad"               /data/local/tmp/cat_arm64/
 adb push "$BASE_DIR/apps_and_permissions" /data/local/tmp/cat_arm64/
 adb push "$BASE_DIR/overlays"             /data/local/tmp/cat_arm64/
 adb push "$BASE_DIR/audio_configs"        /data/local/tmp/cat_arm64/
+adb push "$BASE_DIR/selinux"              /data/local/tmp/cat_arm64/
 
 echo "[+] Installing into /system and /vendor..."
 adb shell "su -c '
@@ -64,6 +65,13 @@ for xml in audio_platform_info.xml audio_platform_info_intcodec.xml audio_platfo
     chmod 0644 /vendor/etc/\$xml
     chcon u:object_r:vendor_configs_file:s0 /vendor/etc/\$xml
 done
+
+# 7. SELinux Policy Rules (/system/etc/selinux/plat_sepolicy.cil)
+if ! grep -q \"CUSTOM CAT S22 FLIP RULES\" /system/etc/selinux/plat_sepolicy.cil; then
+    sed -n \"/;; --- CUSTOM CAT S22 FLIP RULES/,\\\$p\" /data/local/tmp/cat_arm64/selinux/custom_cat_s22.cil >> /system/etc/selinux/plat_sepolicy.cil
+    chmod 0644 /system/etc/selinux/plat_sepolicy.cil
+    chcon u:object_r:sepolicy_file:s0 /system/etc/selinux/plat_sepolicy.cil
+fi
 
 sync
 '"

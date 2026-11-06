@@ -68,9 +68,45 @@ static int find_hall_event_node(void) {
 }
 
 int main(void) {
+    /* Export GPIO 1190 (GPIO 44 + base 1146) for fallback polling if hall_switch input node is not registered */
+    int efd = open("/sys/class/gpio/export", O_WRONLY);
+    if (efd >= 0) {
+        write(efd, "1190\n", 5);
+        close(efd);
+    }
+    int edge_fd = open("/sys/class/gpio/gpio1190/edge", O_WRONLY);
+    if (edge_fd >= 0) {
+        write(edge_fd, "both\n", 5);
+        close(edge_fd);
+    }
+
+    int last_gpio_state = -1;
+
     for (;;) {
         int fd = find_hall_event_node();
         if (fd < 0) {
+            /* Fallback: monitor /sys/class/gpio/gpio1190/value via POLLPRI / read */
+            int gfd = open("/sys/class/gpio/gpio1190/value", O_RDONLY);
+            if (gfd >= 0) {
+                char buf[4] = {0};
+                if (read(gfd, buf, 1) == 1) {
+                    int state = (buf[0] == '1') ? 1 : 0; /* 1 = open, 0 = closed */
+                    if (last_gpio_state != -1 && state != last_gpio_state) {
+                        if (state == 1) {
+                            send_key("224"); /* KEYCODE_WAKEUP */
+                        } else {
+                            send_key("223"); /* KEYCODE_SLEEP */
+                        }
+                    }
+                    last_gpio_state = state;
+                }
+                struct pollfd gpfd = { .fd = gfd, .events = POLLPRI | POLLERR };
+                lseek(gfd, 0, SEEK_SET);
+                read(gfd, buf, sizeof(buf));
+                poll(&gpfd, 1, 500);
+                close(gfd);
+                continue;
+            }
             sleep(1);
             continue;
         }

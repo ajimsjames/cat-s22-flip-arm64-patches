@@ -22,6 +22,8 @@
 #define HALL_DEV        "/dev/input/event3"
 #define KEYLIGHT_SYSFS  "/sys/devices/platform/soc/soc:keyboard_light/leds/keyboard_light/brightness"
 #define KEYLIGHT_ALT    "/sys/class/leds/keyboard_light/brightness"
+#define KEYLIGHT_GPIO   "/sys/class/gpio/gpio1276/value"
+#define HALL_GPIO_VAL   "/sys/class/gpio/gpio1190/value"
 #define CONFIG_FILE     "/dev/shm_outerscreen_cmd"
 
 static int cfg_kl_enabled    = 1;
@@ -29,6 +31,22 @@ static int cfg_kl_brightness = 255;
 static int cfg_kl_timeout    = 0; /* 0 = stay on while flip open */
 static int lid_open          = 1;
 static int current_led_val   = -1;
+
+static void init_gpios(void) {
+    int efd = open("/sys/class/gpio/export", O_WRONLY);
+    if (efd >= 0) {
+        write(efd, "1276\n", 5);
+        write(efd, "1190\n", 5);
+        close(efd);
+    }
+    int dfd = open("/sys/class/gpio/gpio1276/direction", O_WRONLY);
+    if (dfd >= 0) {
+        write(dfd, "out\n", 4);
+        close(dfd);
+    }
+    chmod(KEYLIGHT_GPIO, 0666);
+    chmod(HALL_GPIO_VAL, 0666);
+}
 
 static void set_keypad_light(int val) {
     if (val == current_led_val) return;
@@ -38,6 +56,14 @@ static void set_keypad_light(int val) {
         char buf[16];
         int len = snprintf(buf, sizeof(buf), "%d\n", val);
         write(fd, buf, len);
+        close(fd);
+        current_led_val = val;
+        return;
+    }
+    fd = open(KEYLIGHT_GPIO, O_WRONLY);
+    if (fd >= 0) {
+        const char *gval = (val > 0) ? "1\n" : "0\n";
+        write(fd, gval, 2);
         close(fd);
         current_led_val = val;
     }
@@ -66,6 +92,7 @@ static void load_config(void) {
 int main(void) {
     signal(SIGPIPE, SIG_IGN);
 
+    init_gpios();
     load_config();
 
     struct pollfd fds[16];
@@ -89,6 +116,21 @@ int main(void) {
     for (;;) {
         int ret = poll(fds, num_fds, 1000);
         time_t now = time(NULL);
+
+        /* Also check GPIO 1190 (Hall Sensor) if present: 1 = open, 0 = closed */
+        int hfd = open(HALL_GPIO_VAL, O_RDONLY);
+        if (hfd >= 0) {
+            char hbuf[4] = {0};
+            if (read(hfd, hbuf, 1) == 1) {
+                int new_open = (hbuf[0] == '1') ? 1 : 0;
+                if (new_open != lid_open) {
+                    lid_open = new_open;
+                    last_activity = now;
+                    current_led_val = -1;
+                }
+            }
+            close(hfd);
+        }
 
         struct stat st;
         if (stat(CONFIG_FILE, &st) == 0 && st.st_mtime != last_cfg_mtime) {

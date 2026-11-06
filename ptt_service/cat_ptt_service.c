@@ -57,6 +57,12 @@ static void set_keylight_hw(int val) {
         int len = snprintf(buf, sizeof(buf), "%d\n", val);
         write(fd, buf, len);
         close(fd);
+        return;
+    }
+    fd = open("/sys/class/gpio/gpio1276/value", O_WRONLY);
+    if (fd >= 0) {
+        write(fd, val > 0 ? "1\n" : "0\n", 2);
+        close(fd);
     }
 }
 
