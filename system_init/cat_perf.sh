@@ -42,23 +42,11 @@ resetprop_phh persist.dbg.allow_ims_off 1
 resetprop_phh persist.sys.phh.ims.caf true
 resetprop_phh persist.sys.phh.ims.floss false
 
-# 6. Display Density & Compact UI Metrics
+# 6. Display Density & Compact UI Metrics (Enforce 210 DPI for Keypad Coordinate Alignment)
 wm density 210 2>/dev/null
-
-# 7. VoltageOS Custom Branding & Attribution
-# Settings.apk VoltageMaintainerPreferenceController:
-# summary = getBuildStatus() + " by " + getString(R.string.voltage_maintainer)
-# When ro.voltage.build.status is set, getBuildStatus() returns that exact string.
-# Overlay overrides R.string.voltage_maintainer to "ajugeorge".
-# Combined summary display: "GSI modded for CAT S22 FLIP by ajugeorge"
-resetprop_phh ro.voltage.build.status "GSI modded for CAT S22 FLIP"
-resetprop_phh ro.voltage.buildtype "GSI modded for CAT S22 FLIP"
-resetprop_phh ro.voltage.maintainer "ajugeorge"
-resetprop_phh ro.voltage.version "VoltageOS-4.4-CAT-S22-ajugeorge"
-setprop ro.voltage.build.status "GSI modded for CAT S22 FLIP"
-setprop ro.voltage.buildtype "GSI modded for CAT S22 FLIP"
-setprop ro.voltage.maintainer "ajugeorge"
-setprop ro.voltage.version "VoltageOS-4.4-CAT-S22-ajugeorge"
+settings put secure display_density_forced 210 2>/dev/null
+resetprop_phh persist.sys.display_density 210 2>/dev/null
+resetprop -p persist.sys.display_density 210 2>/dev/null
 
 # 8. Prevent Android from sleeping outer screen (SPI bus power gating fix)
 # NotificationShade forces userActivityTimeout=10000ms via window attrs.
