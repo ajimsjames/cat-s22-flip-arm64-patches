@@ -5,7 +5,7 @@
 # The Red End Call button (☎ / ⏻) is wired to KEY_POWER on qpnp_pon.
 settings put secure incall_power_button_behavior 2
 
-# 2. CPU Schedutil Governor Tweaks (instantaneous clock ramp-up)
+# 2. CPU Schedutil Governor & Input Boost (Instantaneous clock ramp-up for Cortex-A53)
 for gov in /sys/devices/system/cpu/cpufreq/policy*/schedutil /sys/devices/system/cpu/cpu*/cpufreq/schedutil; do
     if [ -d "$gov" ]; then
         echo 0 > "$gov/up_rate_limit_us" 2>/dev/null
@@ -14,17 +14,25 @@ for gov in /sys/devices/system/cpu/cpufreq/policy*/schedutil /sys/devices/system
     fi
 done
 
-# 3. Linux Kernel Virtual Memory & Cache Tuning
-echo 60 > /proc/sys/vm/swappiness 2>/dev/null
-echo 50 > /proc/sys/vm/vfs_cache_pressure 2>/dev/null
+# CPU Input Touch Boost: 80ms ramp-up on touch to max frequencies across all 4 A53 cores
+if [ -d "/sys/devices/system/cpu/cpu_boost" ]; then
+    echo 80 > /sys/devices/system/cpu/cpu_boost/input_boost_ms 2>/dev/null
+    echo "0:1305600 1:1305600 2:1305600 3:1305600" > /sys/devices/system/cpu/cpu_boost/input_boost_freq 2>/dev/null
+fi
+
+# 3. Linux Kernel Virtual Memory, Watermark & Cache Tuning
+echo 100 > /proc/sys/vm/swappiness 2>/dev/null
+echo 100 > /proc/sys/vm/vfs_cache_pressure 2>/dev/null
+echo 50 > /proc/sys/vm/watermark_scale_factor 2>/dev/null
 echo 15 > /proc/sys/vm/dirty_ratio 2>/dev/null
 echo 5 > /proc/sys/vm/dirty_background_ratio 2>/dev/null
 echo 500 > /proc/sys/vm/dirty_expire_centisecs 2>/dev/null
 echo 200 > /proc/sys/vm/dirty_writeback_centisecs 2>/dev/null
 
-# 4. I/O Scheduler & Read-Ahead Optimization for eMMC
+# 4. I/O Scheduler & Read-Ahead Optimization for eMMC (BFQ / mq-deadline)
 for queue in /sys/block/mmcblk*/queue; do
     if [ -d "$queue" ]; then
+        echo bfq > "$queue/scheduler" 2>/dev/null || echo mq-deadline > "$queue/scheduler" 2>/dev/null
         echo 512 > "$queue/read_ahead_kb" 2>/dev/null
         echo 0 > "$queue/iostats" 2>/dev/null
         echo 0 > "$queue/add_random" 2>/dev/null
@@ -59,7 +67,13 @@ settings put global low_power 0
 # outerscreen_service writes this at startup, but ensure it survives reboots.
 echo "outerscreen_wakelock" > /sys/power/wake_lock 2>/dev/null
 
-# 9. Infinity-X Low-RAM (2GB) & Kernel 4.9 LMKD + Axion Performance Tuning
+# 9. Infinity-X Low-RAM (2GB) & Pure PSI-based LMKD Tuning
+# Disable legacy static minfree levels and enforce pure PSI pressure stalls
+resetprop_phh ro.lmk.use_minfree_levels false
+resetprop_phh ro.lmk.kill_heaviest_task true
+resetprop_phh ro.lmk.kill_timeout_ms 100
+resetprop_phh ro.lmk.psi_partial_stall_ms 200
+resetprop_phh ro.lmk.psi_complete_stall_ms 700
 setprop persist.sys.phh.lmk_tweaks true
 setprop persist.sys.phh.axion_props true
 
