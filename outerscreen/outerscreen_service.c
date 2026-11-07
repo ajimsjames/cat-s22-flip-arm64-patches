@@ -32,6 +32,7 @@
 #define PTT_KEY_1       523  /* KEY_NUMERIC_B */
 #define PTT_KEY_2       525  /* Raw matrix row=4 col=3 */
 #define WAKE_TIMEOUT_SEC 10
+#define WAKE_FILE       "/dev/shm_outerscreen_wake"
 
 static void acquire_wakelock(void) {
     int fd = open(WAKELOCK_PATH, O_WRONLY);
@@ -69,13 +70,25 @@ static int open_input_device_by_name(const char *target_name) {
 
 /* Returns: 1 = lid open, 0 = lid closed */
 static int get_lid_state(int hall_fd) {
-    if (hall_fd < 0) return 0; /* Default closed if no sensor */
-    unsigned long sw_bit = 0;
-    if (ioctl(hall_fd, EVIOCGSW(sizeof(sw_bit)), &sw_bit) >= 0) {
-        /* SW_LID bit 0: 0 = lid open, 1 = lid closed */
-        return (sw_bit & 1) ? 0 : 1;
+    /* Primary check: /sys/class/gpio/gpio1190/value (1 = open, 0 = closed) */
+    int gfd = open("/sys/class/gpio/gpio1190/value", O_RDONLY);
+    if (gfd >= 0) {
+        char ch = 0;
+        if (read(gfd, &ch, 1) == 1) {
+            close(gfd);
+            return (ch == '1') ? 1 : 0;
+        }
+        close(gfd);
     }
-    return 0;
+
+    if (hall_fd >= 0) {
+        unsigned long sw_bit = 0;
+        if (ioctl(hall_fd, EVIOCGSW(sizeof(sw_bit)), &sw_bit) >= 0) {
+            /* SW_LID bit 0: 0 = lid open, 1 = lid closed */
+            return (sw_bit & 1) ? 0 : 1;
+        }
+    }
+    return 0; /* Default closed if uncertain */
 }
 
 static void set_backlight(int val) {
@@ -86,6 +99,25 @@ static void set_backlight(int val) {
         snprintf(buf, sizeof(buf), "%d\n", val);
         write(fd, buf, strlen(buf));
         close(fd);
+    }
+    /* Also directly control TLMM GPIO 12 (1146 + 12 = 1158) outer screen backlight enable */
+    int gfd = open("/sys/class/gpio/gpio1158/value", O_WRONLY);
+    if (gfd < 0) {
+        int efd = open("/sys/class/gpio/export", O_WRONLY);
+        if (efd >= 0) {
+            write(efd, "1158\n", 5);
+            close(efd);
+        }
+        int dfd = open("/sys/class/gpio/gpio1158/direction", O_WRONLY);
+        if (dfd >= 0) {
+            write(dfd, "out\n", 4);
+            close(dfd);
+        }
+        gfd = open("/sys/class/gpio/gpio1158/value", O_WRONLY);
+    }
+    if (gfd >= 0) {
+        write(gfd, (val > 0) ? "1\n" : "0\n", 2);
+        close(gfd);
     }
 }
 
@@ -813,7 +845,8 @@ int main(void) {
     /* Open input devices for event monitoring */
     int hall_fd = open_input_device_by_name("hall_switch");
     int ptt_fd  = open_input_device_by_name("matrix_keypad");
-    if (ptt_fd < 0) ptt_fd = open_input_device_by_name("gpio_keys");
+    int ptt2_fd = open_input_device_by_name("Cat_Keypad_Clean");
+    int gpio_fd = open_input_device_by_name("gpio_keys");
 
     int call_state = 0;
     char incoming_num[64] = {0};
@@ -824,7 +857,7 @@ int main(void) {
 
     int last_lid_open = -1;
     time_t wake_expire_time = time(NULL) + WAKE_TIMEOUT_SEC; /* Wake on boot */
-    int display_active = 1;
+    int display_active = -1; /* Force initial ON/OFF transition on startup */
 
     for (;;) {
         loop_count++;
@@ -836,16 +869,17 @@ int main(void) {
 
         /* Re-open input fds if disconnected */
         if (hall_fd < 0) hall_fd = open_input_device_by_name("hall_switch");
-        if (ptt_fd < 0) {
-            ptt_fd = open_input_device_by_name("matrix_keypad");
-            if (ptt_fd < 0) ptt_fd = open_input_device_by_name("gpio_keys");
-        }
+        if (ptt_fd < 0)  ptt_fd  = open_input_device_by_name("matrix_keypad");
+        if (ptt2_fd < 0) ptt2_fd = open_input_device_by_name("Cat_Keypad_Clean");
+        if (gpio_fd < 0) gpio_fd = open_input_device_by_name("gpio_keys");
 
         /* 1. Poll input devices (Hall sensor + PTT) non-blocking */
-        struct pollfd pfds[2];
+        struct pollfd pfds[4];
         int num_pfds = 0;
         if (hall_fd >= 0) { pfds[num_pfds].fd = hall_fd; pfds[num_pfds].events = POLLIN; num_pfds++; }
         if (ptt_fd >= 0)  { pfds[num_pfds].fd = ptt_fd;  pfds[num_pfds].events = POLLIN; num_pfds++; }
+        if (ptt2_fd >= 0) { pfds[num_pfds].fd = ptt2_fd; pfds[num_pfds].events = POLLIN; num_pfds++; }
+        if (gpio_fd >= 0) { pfds[num_pfds].fd = gpio_fd; pfds[num_pfds].events = POLLIN; num_pfds++; }
 
         if (num_pfds > 0) {
             int ret = poll(pfds, num_pfds, 0);
@@ -878,12 +912,20 @@ int main(void) {
             }
         }
 
-        /* If hall sensor node exists, verify current switch state */
-        if (hall_fd >= 0 && last_lid_open == -1) {
-            last_lid_open = get_lid_state(hall_fd);
-            if (last_lid_open == 0) {
+        /* Check Hall switch state (via input node or direct sysfs gpio) */
+        int cur_lid_open = get_lid_state(hall_fd);
+        if (last_lid_open != cur_lid_open) {
+            if (cur_lid_open == 0) {
+                /* Flip just closed -> Turn ON outer screen for 10s */
                 wake_expire_time = time(NULL) + WAKE_TIMEOUT_SEC;
             }
+            last_lid_open = cur_lid_open;
+        }
+
+        /* Check if keypad_debounce_clean signaled a PTT press while flip is closed */
+        if (access(WAKE_FILE, F_OK) == 0) {
+            unlink(WAKE_FILE);
+            wake_expire_time = time(NULL) + WAKE_TIMEOUT_SEC;
         }
 
         /* 2. Check Telephony (Call state keeps screen active) */
@@ -915,13 +957,13 @@ int main(void) {
 
         /* 4. Display state transitions */
         if (!should_display) {
-            if (display_active) {
-                /* Transition to OFF: blank FB, turn off backlight, release wakelock */
-                set_backlight(0);
+            if (display_active != 0) {
+                /* Transition to OFF: paint black frame, turn off backlight (GPIO 12), release wakelock */
                 clear_screen(fb);
                 vinfo.yoffset = 0;
                 ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
-                ioctl(fb_fd, FBIOBLANK, FB_BLANK_POWERDOWN);
+                ioctl(fb_fd, FBIOPAN_DISPLAY, &vinfo);
+                set_backlight(0);
                 release_wakelock();
                 display_active = 0;
             }
@@ -930,14 +972,12 @@ int main(void) {
         }
 
         /* Transition to ON / Active rendering */
-        if (!display_active) {
+        if (display_active != 1) {
             acquire_wakelock();
             ioctl(fb_fd, FBIOBLANK, FB_BLANK_UNBLANK);
-            set_backlight(cfg_outer_brightness);
             display_active = 1;
         }
 
-        set_backlight(cfg_outer_brightness);
         clear_screen(fb);
 
         /* Render UI */
@@ -967,12 +1007,15 @@ int main(void) {
         vinfo.yoffset = 0;
         ioctl(fb_fd, FBIOPUT_VSCREENINFO, &vinfo);
         ioctl(fb_fd, FBIOPAN_DISPLAY, &vinfo);
+        set_backlight(cfg_outer_brightness);
 
         sleep(1);
     }
 
     if (hall_fd >= 0) close(hall_fd);
     if (ptt_fd >= 0) close(ptt_fd);
+    if (ptt2_fd >= 0) close(ptt2_fd);
+    if (gpio_fd >= 0) close(gpio_fd);
     close(fb_fd);
     return 0;
 }

@@ -97,11 +97,23 @@ int main(void) {
 
     struct pollfd fds[16];
     int num_fds = 0;
+    int hall_fd = -1;
     for (int i = 0; i < 16; i++) {
         char path[64];
         snprintf(path, sizeof(path), "/dev/input/event%d", i);
         int fd = open(path, O_RDONLY | O_NONBLOCK);
         if (fd >= 0) {
+            char name[128] = {0};
+            if (ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name) >= 0) {
+                if (strstr(name, "hall_switch") != NULL) {
+                    hall_fd = fd;
+                    unsigned long sw_bit = 0;
+                    if (ioctl(hall_fd, EVIOCGSW(sizeof(sw_bit)), &sw_bit) >= 0) {
+                        /* SW_LID bit 0: 0 = lid open, 1 = lid closed */
+                        lid_open = (sw_bit & 1) ? 0 : 1;
+                    }
+                }
+            }
             fds[num_fds].fd = fd;
             fds[num_fds].events = POLLIN;
             num_fds++;
@@ -111,11 +123,24 @@ int main(void) {
     time_t last_activity = time(NULL);
     time_t last_cfg_mtime = 0;
 
-    set_keypad_light(cfg_kl_enabled ? cfg_kl_brightness : 0);
+    set_keypad_light((lid_open && cfg_kl_enabled) ? cfg_kl_brightness : 0);
 
     for (;;) {
         int ret = poll(fds, num_fds, 1000);
         time_t now = time(NULL);
+
+        /* Poll EVIOCGSW on hall_switch so lid_open is always accurate */
+        if (hall_fd >= 0) {
+            unsigned long sw_bit = 0;
+            if (ioctl(hall_fd, EVIOCGSW(sizeof(sw_bit)), &sw_bit) >= 0) {
+                int new_open = (sw_bit & 1) ? 0 : 1;
+                if (new_open != lid_open) {
+                    lid_open = new_open;
+                    last_activity = now;
+                    current_led_val = -1;
+                }
+            }
+        }
 
         /* Also check GPIO 1190 (Hall Sensor) if present: 1 = open, 0 = closed */
         int hfd = open(HALL_GPIO_VAL, O_RDONLY);
@@ -150,9 +175,12 @@ int main(void) {
                             lid_open = (ev.value == 0) ? 1 : 0;
                             last_activity = now;
                             current_led_val = -1;
-                        } else if (ev.type == EV_KEY && ev.value == 1) {
-                            /* Physical key press wakes keypad backlight if lid is open */
-                            last_activity = now;
+                        } else if (ev.type == EV_KEY && ev.value == 1 &&
+                                   ev.code != 523 && ev.code != 525) {
+                            /* Physical key press (excluding PTT) wakes keypad backlight ONLY if lid is open */
+                            if (lid_open) {
+                                last_activity = now;
+                            }
                         }
                     }
                 }

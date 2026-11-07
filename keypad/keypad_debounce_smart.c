@@ -55,8 +55,10 @@ static void _sleep_ms(int ms) {
 }
 
 #define INPUT_DEV       "/dev/input/event1"
+#define HALL_DEV        "/dev/input/event3"
 #define UINPUT_DEV      "/dev/uinput"
 #define CONFIG_FILE     "/dev/shm_outerscreen_cmd"
+#define WAKE_FILE       "/dev/shm_outerscreen_wake"
 
 #define DEBOUNCE_NS     120000000LL        /* 120 ms anti-chatter */
 #define STAR_LONG_NS    2000000000LL       /* Full 2.0 seconds long-press for '*' */
@@ -313,6 +315,18 @@ static int read_configured_mouse_speed(int default_speed) {
     return default_speed;
 }
 
+/* Returns: 1 = lid open, 0 = lid closed */
+static int get_lid_open(int hall_fd) {
+    if (hall_fd >= 0) {
+        unsigned long sw_bit = 0;
+        if (ioctl(hall_fd, EVIOCGSW(sizeof(sw_bit)), &sw_bit) >= 0) {
+            /* SW_LID bit 0: 0 = lid open, 1 = lid closed */
+            return (sw_bit & 1) ? 0 : 1;
+        }
+    }
+    return 1;
+}
+
 static int create_virtual_touchscreen(void) {
     int ut = open(UINPUT_DEV, O_WRONLY | O_NONBLOCK);
     if (ut < 0) return -1;
@@ -355,6 +369,8 @@ int main(void) {
     if (src < 0) return 1;
 
     ioctl(src, EVIOCGRAB, 1);
+
+    int hall_fd = open(HALL_DEV, O_RDONLY | O_NONBLOCK);
 
     int ui = open(UINPUT_DEV, O_WRONLY | O_NONBLOCK);
     if (ui < 0) return 2;
@@ -477,6 +493,23 @@ int main(void) {
                         suppressed_up[code] = 0;
                         continue;
                     }
+                }
+
+                /* When flip is CLOSED (SW_LID == 1):
+                 * - If PTT (523 / 525) is pressed, signal outerscreen_service via WAKE_FILE
+                 * - Suppress forwarding any matrix_keypad keys to Cat_Keypad_Clean so Android
+                 *   InputReader never wakes the main display while the flip is closed!
+                 */
+                if (hall_fd < 0) hall_fd = open(HALL_DEV, O_RDONLY | O_NONBLOCK);
+                if (!get_lid_open(hall_fd)) {
+                    if (val == 1 && (code == 523 || code == 525)) {
+                        int wfd = open(WAKE_FILE, O_CREAT | O_WRONLY | O_TRUNC, 0666);
+                        if (wfd >= 0) {
+                            write(wfd, "1\n", 2);
+                            close(wfd);
+                        }
+                    }
+                    continue;
                 }
 
                 /* 1. Long-press '*' (>= 2.0 seconds) to toggle Virtual Mouse */
